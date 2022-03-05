@@ -2,12 +2,17 @@ use std::net::Ipv4Addr;
 use std::str::FromStr;
 
 use anyhow::Context;
+use futures::Stream;
+use futures::TryFutureExt;
+use reqwest::Proxy as ReqwestProxy;
+use std::sync::Arc;
+use thiserror::Error;
 use tokio;
+use tokio::sync::RwLock;
+use tokio::time::Duration;
+use tokio_stream::StreamExt;
 
-pub mod pool;
-pub mod server;
-
-use pool::{LocalProxyPool, ProxyPool};
+mod server;
 
 #[derive(Debug, Clone)]
 pub enum ProxyType {
@@ -43,9 +48,41 @@ impl Proxy {
     }
 }
 
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    let proxies: Vec<String> = vec![
+type DB = Arc<RwLock<Vec<Proxy>>>;
+
+#[derive(Error, Debug)]
+pub enum ProxyCheckError {
+    #[error("proxy has invalid format")]
+    InvalidFormat,
+    #[error("connection error")]
+    ConnectionError,
+    #[error("Ip mismatch")]
+    IPMismatch,
+}
+
+type ProxyCheckResult = Result<(), ProxyCheckError>;
+
+async fn check_proxy(proxy: &Proxy) -> ProxyCheckResult {
+    let reqwest_proxy =
+        ReqwestProxy::all(proxy.scheme()).map_err(|_| ProxyCheckError::InvalidFormat)?;
+    let client = reqwest::Client::builder()
+        .proxy(reqwest_proxy)
+        .build()
+        .expect("client can be built");
+    let ip = client
+        .get("http://ifconfig.me")
+        .send()
+        .and_then(|r| r.text())
+        .await
+        .map_err(|_| ProxyCheckError::ConnectionError)?;
+    if ip != proxy.ip.to_string() {
+        return Err(ProxyCheckError::IPMismatch);
+    }
+    Ok(())
+}
+
+fn get_proxies() -> impl Stream<Item = String> {
+    tokio_stream::iter(vec![
         "218.28.136.54:7302".to_string(),
         "217.147.92.74:53923".to_string(),
         "159.203.33.4:7108".to_string(),
@@ -122,13 +159,32 @@ async fn main() -> anyhow::Result<()> {
         "50.62.30.5:39275".to_string(),
         "112.95.227.6:7302".to_string(),
         "182.101.207.165:7300".to_string(),
-    ];
-    let mut pool = LocalProxyPool::new();
+    ])
+}
 
-    for proxy_string in proxies.into_iter() {
-        let proxy: Proxy = proxy_string.parse()?;
-        pool.add(proxy).await;
-        println!("Added!");
+async fn refresh_proxies(db: DB) {
+    db.write().await.clear();
+    let mut s = get_proxies().filter_map(|p| p.parse::<Proxy>().ok());
+    while let Some(proxy) = s.next().await {
+        let db = db.clone();
+        tokio::spawn(async move {
+            if let Ok(_) = check_proxy(&proxy).await {
+                println!("{}", &proxy.ip);
+                db.write().await.push(proxy);
+            }
+        });
     }
-    Ok(server::serve(pool.db, ([127, 0, 0, 1], 8080)).await)
+}
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    let db = DB::default();
+    let db1 = db.clone();
+    tokio::spawn(async move {
+        loop {
+            refresh_proxies(db1.clone()).await;
+            tokio::time::sleep(Duration::from_secs(5 * 60)).await;
+        }
+    });
+    Ok(server::serve(db.clone(), ([127, 0, 0, 1], 8080)).await)
 }
