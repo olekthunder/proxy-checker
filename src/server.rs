@@ -24,7 +24,7 @@ async fn handle_json(db: DB) -> Result<impl warp::Reply, Infallible> {
         }
         yield "]".to_string();
     };
-    let body = Body::wrap_stream(s.map(|i| Result::<String, anyhow::Error>::Ok(i)));
+    let body = Body::wrap_stream(s.map(Result::<String, anyhow::Error>::Ok));
     let mut res = warp::reply::Response::new(body);
     res.headers_mut()
         .insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));

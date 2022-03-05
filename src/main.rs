@@ -8,7 +8,7 @@ use reqwest::Proxy as ReqwestProxy;
 use serde::Serialize;
 use std::sync::Arc;
 use thiserror::Error;
-use tokio;
+
 use tokio::sync::RwLock;
 use tokio::time::Duration;
 use tokio_stream::StreamExt;
@@ -31,7 +31,7 @@ pub struct Proxy {
 impl FromStr for Proxy {
     type Err = anyhow::Error;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut split = s.split(":");
+        let mut split = s.split(':');
         let ip: Ipv4Addr = split.next().context("invalid format")?.parse()?;
         let port: i32 = split.next().context("invalid format")?.parse()?;
         Ok(Proxy {
@@ -170,7 +170,7 @@ async fn refresh_proxies(db: DB) {
     while let Some(proxy) = s.next().await {
         let db = db.clone();
         tokio::spawn(async move {
-            if let Ok(_) = check_proxy(&proxy).await {
+            if check_proxy(&proxy).await.is_ok() {
                 println!("{}", &proxy.ip);
                 db.write().await.push(proxy);
             }
@@ -188,5 +188,6 @@ async fn main() -> anyhow::Result<()> {
             tokio::time::sleep(Duration::from_secs(5 * 60)).await;
         }
     });
-    Ok(server::serve(db.clone(), ([127, 0, 0, 1], 8080)).await)
+    server::serve(db.clone(), ([127, 0, 0, 1], 8080)).await;
+    Ok(())
 }
