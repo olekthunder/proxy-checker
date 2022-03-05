@@ -1,6 +1,6 @@
 [package]
 edition = "2021"
-name = "proxy-service"
+name = "proxy-checker"
 version = "0.1.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -18,5 +18,5 @@ futures = "0.3.21"
 http = "0.2.6"
 itertools = "0.10.3"
 tokio-stream = "0.1.8"
-warp = "0.3"
 tokio-util = {version = "0.7.0", features = ["io"]}
+warp = "0.3"

@@ -777,7 +777,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "proxy-service"
+name = "proxy-checker"
 version = "0.1.0"
 dependencies = [
  "anyhow",
