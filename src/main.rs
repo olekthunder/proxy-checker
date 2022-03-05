@@ -5,6 +5,7 @@ use anyhow::Context;
 use futures::Stream;
 use futures::TryFutureExt;
 use reqwest::Proxy as ReqwestProxy;
+use serde::Serialize;
 use std::sync::Arc;
 use thiserror::Error;
 use tokio;
@@ -14,12 +15,13 @@ use tokio_stream::StreamExt;
 
 mod server;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "lowercase")]
 pub enum ProxyType {
     Socks5,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Proxy {
     pub proxy_type: ProxyType,
     pub ip: Ipv4Addr,
